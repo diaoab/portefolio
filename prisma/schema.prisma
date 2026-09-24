@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         String    @default("USER") // SUPER_ADMIN | USER
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  profile      Profile?
+  projects     Project[]
+  messages     Message[]
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug      String   @unique
+  fullName  String
+  headline  String   @default("")
+  bio       String   @default("")
+  avatarUrl String?
+  coverUrl  String?
+  location  String   @default("")
+  phone     String   @default("")
+  website   String   @default("")
+  github    String   @default("")
+  linkedin  String   @default("")
+  skills    String   @default("") // séparées par des virgules
+  // Palette du portfolio public
+  theme        String   @default("nuit")
+  accent       String   @default("#7c5cff")
+  bgColor      String   @default("#09090b")
+  surfaceColor String   @default("#111114")
+  textColor    String   @default("#f4f4f5")
+  published Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  summary     String   @default("")
+  content     String   @default("")
+  coverUrl    String?
+  link        String   @default("")
+  tags        String   @default("")
+  published   Boolean  @default(false)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  media       Media[]
+
+  @@index([userId])
+}
+
+model Media {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      String // IMAGE | VIDEO | EMBED
+  url       String
+  caption   String   @default("")
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  toUserId  String
+  toUser    User     @relation(fields: [toUserId], references: [id], onDelete: Cascade)
+  name      String
+  email     String
+  subject   String   @default("")
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([toUserId])
+}
+
+/// Paramètres globaux du site (ligne unique id = "site"), modifiables par le super admin
+model SiteSettings {
+  id              String   @id @default("site")
+  siteName        String   @default("Folio")
+  logoUrl         String?
+  heroTitle       String   @default("Découvrez les talents")
+  heroTitleLine2  String   @default("et leurs réalisations")
+  heroDescription String   @default("Parcourez les portfolios, explorez les projets en images et en vidéo, et contactez directement la personne qui vous inspire.")
+  metaDescription String   @default("Découvrez les portfolios et réalisations de nos talents.")
+  footerText      String   @default("Plateforme de portfolios")
+  updatedAt       DateTime @updatedAt
+}

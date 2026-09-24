@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-grotesk), var(--font-inter), ui-sans-serif, sans-serif;
+  --color-ink: #09090b;
+  --color-panel: #111114;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-muted: #a1a1aa;
+  --color-brand: #7c5cff;
+  --color-brand-2: #22d3ee;
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-ink);
+  color: #f4f4f5;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgb(124 92 255 / 0.4);
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-panel/80 backdrop-blur;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-zinc-300;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-brand/70 focus:ring-4 focus:ring-brand/15;
+  }
+  .btn-primary,
+  .btn-ghost,
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply bg-gradient-to-r from-brand to-violet-500 text-white shadow-lg shadow-brand/20 hover:brightness-110;
+  }
+  .btn-ghost {
+    @apply border border-line bg-white/[0.03] text-zinc-200 hover:bg-white/[0.07];
+  }
+  .btn-danger {
+    @apply border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-white/[0.04] px-2.5 py-0.5 text-xs font-medium text-zinc-300;
+  }
+  .text-gradient {
+    @apply bg-gradient-to-r from-white via-violet-200 to-cyan-200 bg-clip-text text-transparent;
+  }
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at top, black 30%, transparent 75%);
+}
+
+/*
+ * Thème personnalisé d'un portfolio : remappe les couleurs du design system
+ * à partir de 4 variables (--p-bg, --p-surface, --p-text, --accent) posées en style inline.
+ */
+.portfolio-theme {
+  --color-ink: var(--p-bg);
+  --color-panel: var(--p-surface);
+  --color-brand: var(--accent);
+  --color-line: color-mix(in oklab, var(--p-text) 13%, transparent);
+  --color-muted: color-mix(in oklab, var(--p-text) 62%, var(--p-bg));
+  --color-zinc-100: var(--p-text);
+  --color-zinc-200: color-mix(in oklab, var(--p-text) 92%, var(--p-bg));
+  --color-zinc-300: color-mix(in oklab, var(--p-text) 82%, var(--p-bg));
+  --color-zinc-400: color-mix(in oklab, var(--p-text) 66%, var(--p-bg));
+  --color-zinc-500: color-mix(in oklab, var(--p-text) 50%, var(--p-bg));
+  --color-zinc-600: color-mix(in oklab, var(--p-text) 34%, var(--p-bg));
+  min-height: 100vh;
+  background: var(--p-bg);
+  color: var(--p-text);
+}
+.portfolio-theme .btn-ghost,
+.portfolio-theme .badge,
+.portfolio-theme .input {
+  background-color: color-mix(in oklab, var(--p-text) 4%, transparent);
+}
+.portfolio-theme .btn-accent {
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: 0 10px 30px -12px var(--accent);
+}
+.portfolio-theme .btn-accent:hover {
+  filter: brightness(1.08);
+}
+
+.prose-content {
+  white-space: pre-wrap;
+  line-height: 1.75;
+  color: var(--color-zinc-300);
+}
