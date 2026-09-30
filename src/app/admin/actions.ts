@@ -4,8 +4,10 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getT } from "@/lib/i18n-server";
 import { getSettings } from "@/lib/settings";
 import { uniqueSlug } from "@/lib/slug";
+import { deleteUserWithFiles } from "@/lib/users";
 import { deleteUpload, isFile, saveUpload } from "@/lib/uploads";
 import { generatePassword, str, type FormState } from "@/lib/utils";
 
@@ -13,15 +15,16 @@ export async function updateSettings(_: FormState, formData: FormData): Promise<
   await requireAdmin();
   const siteName = str(formData, "siteName", 60);
   const heroTitle = str(formData, "heroTitle", 120);
-  if (!siteName) return { error: "Le nom du site est obligatoire." };
-  if (!heroTitle) return { error: "Le titre principal est obligatoire." };
+  const t = await getT();
+  if (!siteName) return { error: t.settings.nameRequired };
+  if (!heroTitle) return { error: t.settings.titleRequired };
 
   try {
     const current = await getSettings();
     let logoUrl = current.logoUrl;
     const logo = formData.get("logo");
     if (isFile(logo)) {
-      logoUrl = (await saveUpload(logo, ["image"])).url;
+      logoUrl = (await saveUpload(logo, ["image"], t)).url;
       await deleteUpload(current.logoUrl);
     } else if (formData.get("remove_logo") === "on") {
       await deleteUpload(current.logoUrl);
@@ -38,13 +41,22 @@ export async function updateSettings(_: FormState, formData: FormData): Promise<
         heroDescription: str(formData, "heroDescription", 400),
         metaDescription: str(formData, "metaDescription", 300),
         footerText: str(formData, "footerText", 200),
+        heroTitleEn: str(formData, "heroTitleEn", 120),
+        heroTitleLine2En: str(formData, "heroTitleLine2En", 120),
+        heroDescriptionEn: str(formData, "heroDescriptionEn", 400),
+        metaDescriptionEn: str(formData, "metaDescriptionEn", 300),
+        footerTextEn: str(formData, "footerTextEn", 200),
+        legalText: str(formData, "legalText", 20000),
+        legalTextEn: str(formData, "legalTextEn", 20000),
+        privacyText: str(formData, "privacyText", 20000),
+        privacyTextEn: str(formData, "privacyTextEn", 20000),
       },
     });
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Une erreur est survenue." };
+    return { error: e instanceof Error ? e.message : t.common.error };
   }
   revalidatePath("/", "layout");
-  return { ok: true, message: "Paramètres du site enregistrés ✓" };
+  return { ok: true, message: t.settings.saved };
 }
 
 export type CreateUserState =
@@ -57,11 +69,12 @@ export async function createUser(_: CreateUserState, formData: FormData): Promis
   const email = str(formData, "email", 200).toLowerCase();
   const password = str(formData, "password", 100) || generatePassword();
   const role = formData.get("role") === "SUPER_ADMIN" ? "SUPER_ADMIN" : "USER";
+  const t = (await getT()).admin;
 
-  if (!fullName) return { error: "Le nom est obligatoire." };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Email invalide." };
-  if (password.length < 8) return { error: "Le mot de passe doit contenir au moins 8 caractères." };
-  if (await db.user.findUnique({ where: { email } })) return { error: "Un compte existe déjà avec cet email." };
+  if (!fullName) return { error: t.nameRequired };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: t.invalidEmail };
+  if (password.length < 8) return { error: t.passwordShort };
+  if (await db.user.findUnique({ where: { email } })) return { error: t.emailTaken };
 
   await db.user.create({
     data: {
@@ -106,18 +119,6 @@ export async function deleteUser(formData: FormData) {
   const admin = await requireAdmin();
   const id = str(formData, "id");
   if (id === admin.id) return;
-  const user = await db.user.findUnique({
-    where: { id },
-    include: { profile: true, projects: { include: { media: true } } },
-  });
-  if (!user) return;
-  await db.user.delete({ where: { id } });
-  // Nettoyage des fichiers une fois la suppression effectuée
-  const files = [
-    user.profile?.avatarUrl,
-    user.profile?.coverUrl,
-    ...user.projects.flatMap((p) => [p.coverUrl, ...p.media.map((m) => m.url)]),
-  ];
-  await Promise.all(files.map(deleteUpload));
+  await deleteUserWithFiles(id);
   revalidatePath("/", "layout");
 }

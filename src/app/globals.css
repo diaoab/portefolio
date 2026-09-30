@@ -108,3 +108,60 @@ body {
   line-height: 1.75;
   color: var(--color-zinc-300);
 }
+
+/* Texte enrichi (Markdown léger) */
+.rich-text {
+  line-height: 1.75;
+  color: var(--color-zinc-300);
+}
+.rich-text > * + * {
+  margin-top: 0.85em;
+}
+.rich-text strong {
+  color: var(--color-zinc-100);
+  font-weight: 600;
+}
+.rich-text a {
+  color: var(--color-brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rich-text ul,
+.rich-text ol {
+  padding-left: 1.3em;
+}
+.rich-text ul {
+  list-style: disc;
+}
+.rich-text ol {
+  list-style: decimal;
+}
+.rich-text li + li {
+  margin-top: 0.3em;
+}
+.rich-text li::marker {
+  color: var(--color-brand);
+}
+.rich-text blockquote {
+  border-left: 3px solid var(--color-brand);
+  padding-left: 1em;
+  color: var(--color-zinc-400);
+}
+.rich-text code {
+  border-radius: 0.35em;
+  background: color-mix(in oklab, currentColor 10%, transparent);
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+}
+
+/* Glisser-déposer */
+[draggable="true"] {
+  cursor: grab;
+}
+[data-dragging] {
+  opacity: 0.4;
+}
+[data-over] {
+  outline: 2px dashed var(--color-brand);
+  outline-offset: 3px;
+}

@@ -13,11 +13,25 @@ model User {
   passwordHash String
   role         String    @default("USER") // SUPER_ADMIN | USER
   active       Boolean   @default(true)
+  locale       String    @default("fr") // langue des emails envoyés à l'utilisateur
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   profile      Profile?
   projects     Project[]
   messages     Message[]
+  resetTokens  PasswordResetToken[]
+}
+
+/// Lien « mot de passe oublié » (seul le hash du jeton est stocké)
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Profile {
@@ -36,6 +50,21 @@ model Profile {
   github    String   @default("")
   linkedin  String   @default("")
   skills    String   @default("") // séparées par des virgules
+  // CV : une entrée par bloc (séparés par une ligne vide), 1re ligne = intitulé
+  experience String  @default("")
+  education  String  @default("")
+  languages  String  @default("") // séparées par des virgules
+  cvPublic   Boolean @default(true) // bouton « Télécharger le CV » sur le portfolio public
+  cvTemplate String  @default("modern") // modern | classic | minimal
+  // Versions anglaises du contenu (vides = version française utilisée)
+  headlineEn   String @default("")
+  bioEn        String @default("")
+  experienceEn String @default("")
+  educationEn  String @default("")
+  languagesEn  String @default("")
+  // Préférences
+  notifyEmail  Boolean @default(true) // email à chaque nouveau message
+  stats        DailyStat[]
   // Palette du portfolio public
   theme        String   @default("nuit")
   accent       String   @default("#7c5cff")
@@ -56,6 +85,9 @@ model Project {
   coverUrl    String?
   link        String   @default("")
   tags        String   @default("")
+  titleEn     String   @default("")
+  summaryEn   String   @default("")
+  contentEn   String   @default("")
   published   Boolean  @default(false)
   position    Int      @default(0)
   createdAt   DateTime @default(now())
@@ -87,9 +119,23 @@ model Message {
   subject   String   @default("")
   body      String
   read      Boolean  @default(false)
+  ipHash    String   @default("") // anti-spam (IP hachée, jamais stockée en clair)
   createdAt DateTime @default(now())
 
   @@index([toUserId])
+  @@index([ipHash, createdAt])
+}
+
+/// Statistiques journalières d'un portfolio
+model DailyStat {
+  id          String  @id @default(cuid())
+  profileId   String
+  profile     Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  day         String  // AAAA-MM-JJ
+  views       Int     @default(0)
+  cvDownloads Int     @default(0)
+
+  @@unique([profileId, day])
 }
 
 /// Paramètres globaux du site (ligne unique id = "site"), modifiables par le super admin
@@ -102,5 +148,16 @@ model SiteSettings {
   heroDescription String   @default("Parcourez les portfolios, explorez les projets en images et en vidéo, et contactez directement la personne qui vous inspire.")
   metaDescription String   @default("Découvrez les portfolios et réalisations de nos talents.")
   footerText      String   @default("Plateforme de portfolios")
+  // Versions anglaises (vides = texte français réutilisé)
+  heroTitleEn       String @default("Discover talents")
+  heroTitleLine2En  String @default("and their work")
+  heroDescriptionEn String @default("Browse portfolios, explore projects in pictures and video, and contact the person who inspires you directly.")
+  metaDescriptionEn String @default("Discover the portfolios and work of our talents.")
+  footerTextEn      String @default("Portfolio platform")
+  // Pages légales (Markdown léger ; vide = modèle par défaut)
+  legalText         String @default("")
+  legalTextEn       String @default("")
+  privacyText       String @default("")
+  privacyTextEn     String @default("")
   updatedAt       DateTime @updatedAt
 }

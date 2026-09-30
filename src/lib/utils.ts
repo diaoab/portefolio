@@ -58,7 +58,3 @@ export function toEmbedUrl(url: string): string | null {
   } catch {}
   return null;
 }
-
-export function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(date);
-}

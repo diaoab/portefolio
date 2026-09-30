@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Film, ImagePlus, Link2, X } from "lucide-react";
+import { useT } from "./i18n-provider";
 
 const ACCEPT = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif", "video/mp4", "video/webm", "video/quicktime"];
 const MAX = { image: 8 * 1024 * 1024, video: 100 * 1024 * 1024 };
 const MAX_TOTAL = 100 * 1024 * 1024; // limite d'un envoi (voir next.config.ts)
 
-const mb = (n: number) => `${(n / 1024 / 1024).toFixed(n < 1024 * 1024 ? 2 : 1)} Mo`;
+const mb = (n: number, unit: string) => `${(n / 1024 / 1024).toFixed(n < 1024 * 1024 ? 2 : 1)} ${unit}`;
 
 /**
  * Champ de formulaire pour ajouter plusieurs images / vidéos (glisser-déposer ou sélection)
@@ -15,6 +16,7 @@ const mb = (n: number) => `${(n / 1024 / 1024).toFixed(n < 1024 * 1024 ? 2 : 1)}
  * les liens via le champ `embeds` (un par ligne).
  */
 export function MediaUploader() {
+  const t = useT().media;
   const [files, setFiles] = useState<File[]>([]);
   const [rejected, setRejected] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -47,8 +49,8 @@ export function MediaUploader() {
     const errors: string[] = [];
     for (const f of Array.from(list)) {
       const kind = f.type.startsWith("video/") ? "video" : "image";
-      if (!ACCEPT.includes(f.type)) errors.push(`${f.name} : format non supporté`);
-      else if (f.size > MAX[kind]) errors.push(`${f.name} : trop lourd (max ${mb(MAX[kind])})`);
+      if (!ACCEPT.includes(f.type)) errors.push(t.unsupported(f.name));
+      else if (f.size > MAX[kind]) errors.push(t.tooBig(f.name, mb(MAX[kind], t.mb)));
       else ok.push(f);
     }
     setRejected(errors);
@@ -80,8 +82,8 @@ export function MediaUploader() {
           <ImagePlus className="size-6" />
           <Film className="size-6" />
         </span>
-        <span className="text-sm font-medium">Glissez vos images et vidéos ici</span>
-        <span className="text-xs text-muted">ou cliquez pour en sélectionner plusieurs · images 8 Mo max, vidéos 100 Mo max</span>
+        <span className="text-sm font-medium">{t.dropHere}</span>
+        <span className="text-xs text-muted">{t.dropHint}</span>
         <input
           type="file"
           multiple
@@ -105,8 +107,8 @@ export function MediaUploader() {
       {files.length > 0 && (
         <div>
           <div className="mb-2 flex items-center justify-between text-xs text-muted">
-            <span>{files.length} fichier{files.length > 1 ? "s" : ""} prêt{files.length > 1 ? "s" : ""} · {mb(total)}</span>
-            <button type="button" onClick={() => setFiles([])} className="hover:text-white">Tout retirer</button>
+            <span>{t.ready(files.length, mb(total, t.mb))}</span>
+            <button type="button" onClick={() => setFiles([])} className="hover:text-white">{t.removeAll}</button>
           </div>
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {files.map((f, i) => (
@@ -124,7 +126,7 @@ export function MediaUploader() {
                   type="button"
                   onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
                   className="absolute top-1 right-1 rounded-full bg-black/70 p-1 text-white opacity-80 hover:opacity-100"
-                  title="Retirer"
+                  title={t.removeOne}
                 >
                   <X className="size-3.5" />
                 </button>
@@ -133,7 +135,7 @@ export function MediaUploader() {
           </ul>
           {total > MAX_TOTAL && (
             <p className="mt-2 text-xs text-red-300">
-              L&apos;ensemble dépasse {mb(MAX_TOTAL)} : envoyez les vidéos en plusieurs fois.
+              {t.tooMuch(mb(MAX_TOTAL, t.mb))}
             </p>
           )}
         </div>
@@ -141,7 +143,7 @@ export function MediaUploader() {
 
       <div>
         <label className="label flex items-center gap-2" htmlFor="embeds">
-          <Link2 className="size-4" /> Liens YouTube / Vimeo <span className="font-normal text-muted">(un par ligne)</span>
+          <Link2 className="size-4" /> {t.links} <span className="font-normal text-muted">{t.onePerLine}</span>
         </label>
         <textarea
           id="embeds"

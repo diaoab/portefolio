@@ -8,7 +8,7 @@ export function MediaView({ media, className = "" }: { media: Pick<Media, "type"
     return (
       <iframe
         src={media.url}
-        title={media.caption || "Vidéo"}
+        title={media.caption || "Video"}
         className={`aspect-video w-full ${className}`}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen

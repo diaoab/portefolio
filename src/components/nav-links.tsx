@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FolderKanban, Home, Inbox, KeyRound, Settings, ShieldCheck, UserRound, Users } from "lucide-react";
+import { FileText, FolderKanban, Home, Inbox, KeyRound, Settings, ShieldCheck, UserRound, Users } from "lucide-react";
 
 const ICONS = {
   home: Home,
   profile: UserRound,
+  cv: FileText,
   projects: FolderKanban,
   inbox: Inbox,
   account: KeyRound,

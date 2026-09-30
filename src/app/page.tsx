@@ -4,14 +4,16 @@ import { Avatar } from "@/components/brand";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { db } from "@/lib/db";
 import { visibleProfile } from "@/lib/public";
-import { getSettings } from "@/lib/settings";
+import { getLocale, getT } from "@/lib/i18n-server";
+import { localizeProfile } from "@/lib/localize";
+import { getLocalizedSettings } from "@/lib/settings";
 import { splitList } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const q = (await searchParams).q?.trim() ?? "";
-  const settings = await getSettings();
+  const [settings, t, locale] = await Promise.all([getLocalizedSettings(), getT(), getLocale()]);
   const profiles = await db.profile.findMany({
     where: {
       ...visibleProfile,
@@ -19,6 +21,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         OR: [
           { fullName: { contains: q } },
           { headline: { contains: q } },
+          { headlineEn: { contains: q } },
           { skills: { contains: q } },
           { location: { contains: q } },
         ],
@@ -36,7 +39,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <div className="pointer-events-none absolute -top-32 left-1/2 h-[500px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-r from-brand/25 to-brand-2/20 blur-3xl" />
         <div className="container-page relative py-20 text-center sm:py-28">
           <span className="badge mx-auto mb-6">
-            <Sparkles className="size-3.5 text-brand" /> {profiles.length} talent{profiles.length > 1 ? "s" : ""} à découvrir
+            <Sparkles className="size-3.5 text-brand" /> {t.home.toDiscover(profiles.length)}
           </span>
           <h1 className="mx-auto max-w-3xl font-display text-4xl font-bold tracking-tight sm:text-6xl">
             <span className="text-gradient">{settings.heroTitle}</span>
@@ -55,10 +58,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             <input
               name="q"
               defaultValue={q}
-              placeholder="Nom, métier, compétence, ville…"
+              placeholder={t.home.searchPlaceholder}
               className="w-full bg-transparent py-2 text-sm outline-none placeholder:text-zinc-500"
             />
-            <button className="btn-primary shrink-0">Rechercher</button>
+            <button className="btn-primary shrink-0">{t.home.search}</button>
           </form>
         </div>
       </section>
@@ -66,17 +69,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <section id="talents" className="container-page scroll-mt-20">
         {q && (
           <p className="mb-6 text-sm text-muted">
-            {profiles.length} résultat(s) pour « {q} » ·{" "}
-            <Link href="/#talents" className="text-zinc-200 hover:underline">Effacer</Link>
+            {t.home.results(profiles.length, q)} ·{" "}
+            <Link href="/#talents" className="text-zinc-200 hover:underline">{t.home.clear}</Link>
           </p>
         )}
         {profiles.length === 0 ? (
           <div className="card p-12 text-center text-muted">
-            {q ? "Aucun portfolio ne correspond à votre recherche." : "Aucun portfolio publié pour le moment."}
+            {q ? t.home.noMatch : t.home.noneYet}
           </div>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {profiles.map((p) => (
+            {profiles.map((raw) => localizeProfile(raw, locale)).map((p) => (
               <Link
                 key={p.id}
                 href={`/p/${p.slug}`}
@@ -108,7 +111,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                     ))}
                   </div>
                   <p className="mt-4 border-t border-line pt-3 text-xs text-zinc-500">
-                    {p.user._count.projects} réalisation{p.user._count.projects > 1 ? "s" : ""}
+                    {t.home.projects(p.user._count.projects)}
                   </p>
                 </div>
               </Link>

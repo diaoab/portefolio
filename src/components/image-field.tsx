@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ImagePlus } from "lucide-react";
+import { useT } from "./i18n-provider";
 
 /** Champ d'upload d'image avec aperçu et option de suppression. */
 export function ImageField({
@@ -17,6 +18,7 @@ export function ImageField({
 }) {
   const [preview, setPreview] = useState<string | null>(current ?? null);
   const [removed, setRemoved] = useState(false);
+  const t = useT();
   const round = shape === "round";
   const square = shape === "square";
 
@@ -52,7 +54,7 @@ export function ImageField({
         {current && (
           <label className="flex items-center gap-2 text-xs text-zinc-400">
             <input type="checkbox" name={`remove_${name}`} checked={removed} onChange={(e) => setRemoved(e.target.checked)} />
-            Supprimer
+            {t.common.remove}
           </label>
         )}
       </div>

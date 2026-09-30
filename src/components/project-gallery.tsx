@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
+import { useT } from "./i18n-provider";
 import { MediaView } from "./media-view";
 
 type Item = { id: string; type: string; url: string; caption: string };
@@ -10,6 +11,7 @@ type Item = { id: string; type: string; url: string; caption: string };
 export function ProjectGallery({ media }: { media: Item[] }) {
   const images = media.filter((m) => m.type === "IMAGE");
   const [open, setOpen] = useState<number | null>(null);
+  const t = useT().project;
 
   const go = useCallback(
     (delta: number) => setOpen((i) => (i === null ? i : (i + delta + images.length) % images.length)),
@@ -77,7 +79,7 @@ export function ProjectGallery({ media }: { media: Item[] }) {
         >
           <div className="flex items-center justify-between p-4 text-sm text-zinc-300">
             <span>{open! + 1} / {images.length}</span>
-            <button className="rounded-full p-2 hover:bg-white/10" aria-label="Fermer">
+            <button className="rounded-full p-2 hover:bg-white/10" aria-label={t.close}>
               <X className="size-6" />
             </button>
           </div>
@@ -86,10 +88,10 @@ export function ProjectGallery({ media }: { media: Item[] }) {
             <img key={current.id} src={current.url} alt={current.caption} className="max-h-full max-w-full rounded-lg object-contain" />
             {images.length > 1 && (
               <>
-                <button onClick={() => go(-1)} className="absolute left-2 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 sm:left-4" aria-label="Précédente">
+                <button onClick={() => go(-1)} className="absolute left-2 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 sm:left-4" aria-label={t.previous}>
                   <ChevronLeft className="size-6" />
                 </button>
-                <button onClick={() => go(1)} className="absolute right-2 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 sm:right-4" aria-label="Suivante">
+                <button onClick={() => go(1)} className="absolute right-2 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 sm:right-4" aria-label={t.next}>
                   <ChevronRight className="size-6" />
                 </button>
               </>

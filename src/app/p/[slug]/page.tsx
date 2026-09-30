@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowUpRight, Globe, Link2, Mail, MapPin, Phone, Play } from "lucide-react";
+import { ArrowUpRight, Download, Globe, Link2, Mail, MapPin, Phone, Play } from "lucide-react";
 import { Avatar } from "@/components/brand";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
+import { cvUrl, isCvComplete, parseEntries, type CvEntry } from "@/lib/cv";
+import { getLocale, getT } from "@/lib/i18n-server";
+import { localizeProfile, localizeProject, stripMarkdown } from "@/lib/localize";
 import { getPublicProfile } from "@/lib/public";
+import { getCurrentUser } from "@/lib/auth";
+import { track } from "@/lib/stats";
+import { siteUrl } from "@/lib/site-url";
+import { RichText } from "@/components/rich-text";
 import { themeStyle } from "@/lib/theme";
 import { splitList } from "@/lib/utils";
 import { ContactForm } from "./contact-form";
@@ -14,28 +21,58 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const profile = await getPublicProfile((await params).slug);
-  if (!profile) return { title: "Portfolio introuvable" };
+  const raw = await getPublicProfile((await params).slug);
+  if (!raw) return { title: (await getT()).portfolio.notFound };
+  const profile = localizeProfile(raw, await getLocale());
   return {
-    title: profile.fullName,
-    description: profile.headline || profile.bio.slice(0, 160),
-    openGraph: { images: profile.coverUrl || profile.avatarUrl ? [(profile.coverUrl || profile.avatarUrl)!] : [] },
+    title: profile.headline ? `${profile.fullName} — ${profile.headline}` : profile.fullName,
+    description: profile.headline || stripMarkdown(profile.bio).slice(0, 160),
+    alternates: { canonical: `/p/${profile.slug}` },
+    openGraph: { type: "profile", title: profile.fullName, description: profile.headline || undefined },
+    twitter: { card: "summary_large_image" },
   };
 }
 
 export default async function PortfolioPage({ params }: Props) {
-  const profile = await getPublicProfile((await params).slug);
-  if (!profile) notFound();
-  const projects = profile.user.projects;
+  const raw = await getPublicProfile((await params).slug);
+  if (!raw) notFound();
+  if ((await getCurrentUser())?.id !== raw.userId) await track(raw.id, "views");
+  const locale = await getLocale();
+  const profile = localizeProfile(raw, locale);
+  const projects = profile.user.projects.map((p) => localizeProject(p, locale));
+  const dict = await getT();
+  const t = dict.portfolio;
   const skills = splitList(profile.skills);
+  const languages = splitList(profile.languages);
+  const experience = parseEntries(profile.experience);
+  const education = parseEntries(profile.education);
+  const showCv = profile.cvPublic && isCvComplete(profile);
   const links = [
-    { href: profile.website, label: "Site web", icon: Globe },
+    { href: profile.website, label: t.website, icon: Globe },
     { href: profile.github, label: "GitHub", icon: Link2 },
     { href: profile.linkedin, label: "LinkedIn", icon: Link2 },
   ].filter((l) => l.href);
 
   return (
     <div className="portfolio-theme" style={themeStyle(profile)}>
+      <script
+        type="application/ld+json"
+        // Données structurées pour Google (schema.org/Person)
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Person",
+            name: profile.fullName,
+            jobTitle: profile.headline || undefined,
+            description: stripMarkdown(profile.bio).slice(0, 300) || undefined,
+            address: profile.location ? { "@type": "PostalAddress", addressLocality: profile.location } : undefined,
+            url: `${await siteUrl()}/p/${profile.slug}`,
+            image: profile.avatarUrl ? `${await siteUrl()}${profile.avatarUrl}` : undefined,
+            sameAs: [profile.website, profile.linkedin, profile.github].filter(Boolean),
+            knowsAbout: skills,
+          }).replace(/</g, "\\u003c"),
+        }}
+      />
       <SiteHeader />
 
       {/* En-tête */}
@@ -67,12 +104,16 @@ export default async function PortfolioPage({ params }: Props) {
                 ))}
               </div>
             </div>
-            <a
-              href="#contact"
-              className="btn-primary btn-accent self-start sm:self-end"
-            >
-              <Mail className="size-4" /> Me contacter
-            </a>
+            <div className="flex flex-wrap gap-2 self-start sm:self-end">
+              {showCv && (
+                <a href={cvUrl(profile.slug, locale)} className="btn-ghost">
+                  <Download className="size-4" /> {t.downloadCv}
+                </a>
+              )}
+              <a href="#contact" className="btn-primary btn-accent">
+                <Mail className="size-4" /> {t.contactMe}
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -81,15 +122,15 @@ export default async function PortfolioPage({ params }: Props) {
         <div className="min-w-0 space-y-14">
           {profile.bio && (
             <section>
-              <SectionTitle>À propos</SectionTitle>
-              <p className="prose-content">{profile.bio}</p>
+              <SectionTitle>{t.about}</SectionTitle>
+              <RichText>{profile.bio}</RichText>
             </section>
           )}
 
           <section>
-            <SectionTitle>Réalisations <span className="text-zinc-500">({projects.length})</span></SectionTitle>
+            <SectionTitle>{t.projects} <span className="text-zinc-500">({projects.length})</span></SectionTitle>
             {projects.length === 0 ? (
-              <p className="text-muted">Aucune réalisation publiée pour le moment.</p>
+              <p className="text-muted">{t.noProjects}</p>
             ) : (
               <div className="grid gap-5 sm:grid-cols-2">
                 {projects.map((p) => (
@@ -105,7 +146,7 @@ export default async function PortfolioPage({ params }: Props) {
                       )}
                       {p._count.media > 0 && (
                         <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur">
-                          <Play className="size-3" /> {p._count.media} média{p._count.media > 1 ? "s" : ""}
+                          <Play className="size-3" /> {t.media(p._count.media)}
                         </span>
                       )}
                     </div>
@@ -125,10 +166,24 @@ export default async function PortfolioPage({ params }: Props) {
             )}
           </section>
 
+          {experience.length > 0 && (
+            <section>
+              <SectionTitle>{t.experience}</SectionTitle>
+              <Timeline entries={experience} />
+            </section>
+          )}
+
+          {education.length > 0 && (
+            <section>
+              <SectionTitle>{t.education}</SectionTitle>
+              <Timeline entries={education} />
+            </section>
+          )}
+
           <section id="contact" className="scroll-mt-24">
-            <SectionTitle>Contact</SectionTitle>
+            <SectionTitle>{t.contact}</SectionTitle>
             <div className="card p-6">
-              <p className="mb-5 text-sm text-zinc-400">Un projet, une question ? Écrivez directement à {profile.fullName.split(" ")[0]}.</p>
+              <p className="mb-5 text-sm text-zinc-400">{t.contactIntro(profile.fullName.split(" ")[0]!)}</p>
               <ContactForm slug={profile.slug} name={profile.fullName} />
             </div>
           </section>
@@ -137,7 +192,7 @@ export default async function PortfolioPage({ params }: Props) {
         <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
           {skills.length > 0 && (
             <div className="card p-5">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">Compétences</h2>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">{t.skills}</h2>
               <div className="flex flex-wrap gap-2">
                 {skills.map((s) => (
                   <span key={s} className="rounded-lg px-2.5 py-1 text-sm" style={{ backgroundColor: "color-mix(in oklab, var(--accent) 16%, transparent)" }}>{s}</span>
@@ -145,10 +200,32 @@ export default async function PortfolioPage({ params }: Props) {
               </div>
             </div>
           )}
+          {languages.length > 0 && (
+            <div className="card p-5">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">{dict.cvPdf.languages}</h2>
+              <ul className="space-y-1 text-sm">
+                {languages.map((l) => <li key={l}>{l}</li>)}
+              </ul>
+            </div>
+          )}
         </aside>
       </div>
       <SiteFooter />
     </div>
+  );
+}
+
+function Timeline({ entries }: { entries: CvEntry[] }) {
+  return (
+    <ol className="space-y-5 border-l border-line pl-5">
+      {entries.map((e, i) => (
+        <li key={i} className="relative">
+          <span className="absolute top-1.5 -left-[25px] size-2.5 rounded-full" style={{ backgroundColor: "var(--accent)" }} />
+          <p className="font-medium">{e.heading}</p>
+          {e.details && <p className="prose-content mt-1 text-sm text-zinc-400">{e.details}</p>}
+        </li>
+      ))}
+    </ol>
   );
 }
 

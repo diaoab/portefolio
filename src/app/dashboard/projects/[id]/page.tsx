@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLink, Trash2 } from "lucide-react";
@@ -5,11 +6,14 @@ import { PageHeader } from "@/components/app-shell";
 import { SubmitButton } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getT } from "@/lib/i18n-server";
 import { deleteProject } from "../../actions";
 import { MediaManager } from "../media-manager";
 import { ProjectForm } from "../project-form";
 
-export const metadata = { title: "Modifier la réalisation" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).projects.edit };
+}
 
 export default async function EditProjectPage({
   params,
@@ -26,24 +30,26 @@ export default async function EditProjectPage({
     include: { media: { orderBy: { position: "asc" } } },
   });
   if (!project) notFound();
+  const dict = await getT();
+  const t = dict.projects;
 
   const publicUrl = user.profile?.published && project.published ? `/p/${user.profile.slug}/${project.id}` : null;
 
   return (
     <div className="max-w-6xl">
-      <Link href="/dashboard/projects" className="text-sm text-muted hover:text-white">← Réalisations</Link>
+      <Link href="/dashboard/projects" className="text-sm text-muted hover:text-white">{t.back}</Link>
       <PageHeader
         title={project.title}
-        description={created ? "Réalisation créée ✓ Ajoutez maintenant vos images et vidéos." : "Modifiez le contenu et la galerie."}
+        description={created ? t.created : t.editDescription}
         actions={
           <div className="flex gap-2">
             {publicUrl && (
-              <Link href={publicUrl} target="_blank" className="btn-ghost"><ExternalLink className="size-4" /> Voir</Link>
+              <Link href={publicUrl} target="_blank" className="btn-ghost"><ExternalLink className="size-4" /> {dict.common.view}</Link>
             )}
             <form action={deleteProject}>
               <input type="hidden" name="id" value={project.id} />
-              <SubmitButton className="btn-danger" confirm="Supprimer cette réalisation et tous ses médias ?">
-                <Trash2 className="size-4" /> Supprimer
+              <SubmitButton className="btn-danger" confirm={t.confirmDelete}>
+                <Trash2 className="size-4" /> {dict.common.delete}
               </SubmitButton>
             </form>
           </div>

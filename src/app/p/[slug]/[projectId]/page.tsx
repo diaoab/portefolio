@@ -6,7 +6,10 @@ import { Avatar } from "@/components/brand";
 import { ProjectGallery } from "@/components/project-gallery";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { db } from "@/lib/db";
+import { getLocale, getT } from "@/lib/i18n-server";
+import { localizeProfile, localizeProject, stripMarkdown } from "@/lib/localize";
 import { visibleProfile } from "@/lib/public";
+import { RichText } from "@/components/rich-text";
 import { themeStyle } from "@/lib/theme";
 import { splitList } from "@/lib/utils";
 
@@ -22,26 +25,30 @@ async function getProject({ slug, projectId }: { slug: string; projectId: string
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const project = await getProject(await params);
-  if (!project) return { title: "Réalisation introuvable" };
+  const raw = await getProject(await params);
+  if (!raw) return { title: (await getT()).project.notFound };
+  const project = localizeProject(raw, await getLocale());
   return {
     title: `${project.title} — ${project.user.profile!.fullName}`,
-    description: project.summary,
+    description: project.summary || stripMarkdown(project.content).slice(0, 160),
     openGraph: { images: project.coverUrl ? [project.coverUrl] : [] },
   };
 }
 
 export default async function ProjectPage({ params }: Props) {
-  const project = await getProject(await params);
-  if (!project) notFound();
-  const profile = project.user.profile!;
+  const raw = await getProject(await params);
+  if (!raw) notFound();
+  const locale = await getLocale();
+  const project = localizeProject(raw, locale);
+  const profile = localizeProfile(project.user.profile!, locale);
+  const t = (await getT()).project;
 
   return (
     <div className="portfolio-theme" style={themeStyle(profile)}>
       <SiteHeader />
       <article className="container-page max-w-4xl py-10">
         <Link href={`/p/${profile.slug}`} className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100">
-          <ArrowLeft className="size-4" /> Portfolio de {profile.fullName}
+          <ArrowLeft className="size-4" /> {t.backTo(profile.fullName)}
         </Link>
 
         <header className="mt-6">
@@ -60,7 +67,7 @@ export default async function ProjectPage({ params }: Props) {
             </Link>
             {project.link && (
               <a href={project.link} target="_blank" rel="noopener noreferrer" className="btn-ghost ml-auto">
-                Voir le projet <ExternalLink className="size-4" />
+                {t.viewProject} <ExternalLink className="size-4" />
               </a>
             )}
           </div>
@@ -71,12 +78,12 @@ export default async function ProjectPage({ params }: Props) {
           <img src={project.coverUrl} alt={project.title} className="mt-10 w-full rounded-2xl border border-line object-cover" />
         )}
 
-        {project.content && <div className="prose-content mt-10 text-base">{project.content}</div>}
+        {project.content && <RichText className="mt-10 text-base">{project.content}</RichText>}
 
         {project.media.length > 0 && (
           <section className="mt-12 space-y-6">
             <h2 className="font-display text-2xl font-bold">
-              Galerie <span className="text-zinc-500">({project.media.length})</span>
+              {t.gallery} <span className="text-zinc-500">({project.media.length})</span>
             </h2>
             <ProjectGallery media={project.media.map(({ id, type, url, caption }) => ({ id, type, url, caption }))} />
           </section>
@@ -84,14 +91,14 @@ export default async function ProjectPage({ params }: Props) {
 
         <div className="card mt-16 flex flex-wrap items-center justify-between gap-4 p-6">
           <div>
-            <p className="font-semibold">Ce projet vous intéresse ?</p>
-            <p className="text-sm text-muted">Contactez {profile.fullName} pour en discuter.</p>
+            <p className="font-semibold">{t.interested}</p>
+            <p className="text-sm text-muted">{t.contactAbout(profile.fullName)}</p>
           </div>
           <Link
             href={`/p/${profile.slug}#contact`}
             className="btn-primary btn-accent"
           >
-            <Mail className="size-4" /> Prendre contact
+            <Mail className="size-4" /> {t.getInTouch}
           </Link>
         </div>
       </article>

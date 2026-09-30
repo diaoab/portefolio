@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { ExternalLink, LogOut } from "lucide-react";
 import { logout } from "@/app/login/actions";
+import { getT } from "@/lib/i18n-server";
 import { Avatar, Logo } from "./brand";
+import { LanguageSwitcher } from "./language-switcher";
 import { NavLinks, type NavItem } from "./nav-links";
 
-export function AppShell({
+export async function AppShell({
   user,
   items,
   title,
@@ -16,6 +18,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const name = user.profile?.fullName ?? user.email;
+  const t = await getT();
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[260px_1fr]">
       <aside className="border-b border-line bg-panel/60 p-4 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-b-0">
@@ -24,10 +27,11 @@ export function AppShell({
           <span className="badge">{title}</span>
         </div>
         <NavLinks items={items} />
+        <LanguageSwitcher className="mt-4 lg:mt-6" />
         <div className="mt-4 hidden border-t border-line pt-4 lg:mt-auto lg:block">
           {user.profile?.published && (
             <Link href={`/p/${user.profile.slug}`} target="_blank" className="mb-3 flex items-center gap-2 text-xs text-zinc-400 hover:text-white">
-              <ExternalLink className="size-3.5" /> Voir mon portfolio public
+              <ExternalLink className="size-3.5" /> {t.shell.viewPublic}
             </Link>
           )}
           <div className="flex items-center gap-3">
@@ -37,14 +41,14 @@ export function AppShell({
               <p className="truncate text-xs text-muted">{user.email}</p>
             </div>
             <form action={logout}>
-              <button title="Déconnexion" className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white">
+              <button title={t.shell.logout} className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white">
                 <LogOut className="size-4" />
               </button>
             </form>
           </div>
         </div>
         <form action={logout} className="mt-3 lg:hidden">
-          <button className="text-xs text-zinc-400 hover:text-white">Se déconnecter ({user.email})</button>
+          <button className="text-xs text-zinc-400 hover:text-white">{t.shell.logoutMobile(user.email)}</button>
         </form>
       </aside>
       <main className="min-w-0 p-4 sm:p-8">{children}</main>
