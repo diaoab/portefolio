@@ -13,6 +13,10 @@ vous allez le compléter au fil des étapes. Il contient déjà une clé secrèt
 
 > `.env` est ignoré par git : il ne part jamais sur GitHub. Ne le partagez pas.
 
+> **Raccourcis** :
+> - `npm run configure` pose les questions une à une et remplit `.env` pour vous (ou une seule partie : `npm run configure neon`, `r2`, `site`, `email`, `turnstile`).
+> - `npm run check:r2` vérifie réellement le stockage R2 (envoi, lecture publique, CORS).
+
 ---
 
 ## Étape 1 — Base de données Neon

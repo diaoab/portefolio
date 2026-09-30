@@ -13,7 +13,8 @@
     "test": "vitest run",
     "vercel-build": "prisma generate && prisma db push --skip-generate && next build",
     "postinstall": "prisma generate",
-    "configure": "node scripts/configure.mjs"
+    "configure": "node scripts/configure.mjs",
+    "check:r2": "node --env-file=.env scripts/check-r2.mjs"
   },
   "prisma": {
     "seed": "node prisma/seed.mjs"
