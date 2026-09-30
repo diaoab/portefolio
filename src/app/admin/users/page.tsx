@@ -21,7 +21,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const admin = await requireAdmin();
   const q = (await searchParams).q?.trim() ?? "";
   const users = await db.user.findMany({
-    where: q ? { OR: [{ email: { contains: q } }, { profile: { fullName: { contains: q } } }] } : undefined,
+    where: q ? { OR: [{ email: { contains: q, mode: "insensitive" } }, { profile: { fullName: { contains: q, mode: "insensitive" } } }] } : undefined,
     orderBy: { createdAt: "desc" },
     include: { profile: true, _count: { select: { projects: true, messages: true } } },
   });

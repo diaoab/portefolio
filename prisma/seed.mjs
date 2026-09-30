@@ -21,4 +21,6 @@ if (existing) {
   });
   console.log(`Super admin créé : ${email} / ${password}`);
 }
+// Paramètres du site par défaut
+await prisma.siteSettings.upsert({ where: { id: "site" }, update: {}, create: { id: "site" } });
 await prisma.$disconnect();

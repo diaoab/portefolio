@@ -2,6 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import { Loader2 } from "lucide-react";
+import { usePendingUploads } from "@/lib/upload-client";
 import type { FormState } from "@/lib/utils";
 
 export function SubmitButton({
@@ -16,16 +17,18 @@ export function SubmitButton({
   confirm?: string;
 }) {
   const { pending } = useFormStatus();
+  // Tant qu'un fichier est en cours d'envoi, on ne peut pas enregistrer (il manquerait)
+  const uploading = usePendingUploads() > 0;
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || uploading}
       className={className}
       onClick={(e) => {
         if (confirm && !window.confirm(confirm)) e.preventDefault();
       }}
     >
-      {pending && <Loader2 className="size-4 animate-spin" />}
+      {(pending || uploading) && <Loader2 className="size-4 animate-spin" />}
       {pending && pendingText ? pendingText : children}
     </button>
   );

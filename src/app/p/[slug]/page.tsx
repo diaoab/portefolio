@@ -67,7 +67,7 @@ export default async function PortfolioPage({ params }: Props) {
             description: stripMarkdown(profile.bio).slice(0, 300) || undefined,
             address: profile.location ? { "@type": "PostalAddress", addressLocality: profile.location } : undefined,
             url: `${await siteUrl()}/p/${profile.slug}`,
-            image: profile.avatarUrl ? `${await siteUrl()}${profile.avatarUrl}` : undefined,
+            image: profile.avatarUrl ? new URL(profile.avatarUrl, await siteUrl()).href : undefined,
             sameAs: [profile.website, profile.linkedin, profile.github].filter(Boolean),
             knowsAbout: skills,
           }).replace(/</g, "\\u003c"),

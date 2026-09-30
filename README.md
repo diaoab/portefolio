@@ -10,18 +10,22 @@ Plateforme multi-utilisateurs de portfolios avec 3 espaces :
 
 ## Stack
 
-Next.js 15 (App Router, Server Actions) · TypeScript · Tailwind CSS 4 · Prisma + SQLite · JWT (jose) en cookie httpOnly · bcrypt
+Next.js 15 (App Router, Server Actions) · TypeScript · Tailwind CSS 4 · Prisma + PostgreSQL (Neon) · Cloudflare R2 (fichiers) · JWT (jose) en cookie httpOnly · bcrypt
 
-## Démarrage
+Hébergement cible : **Vercel + Neon + Cloudflare** — voir [DEPLOIEMENT.md](DEPLOIEMENT.md).
+
+## Démarrage (local)
+
+Prérequis : Node.js 20+ et PostgreSQL (Postgres.app sur Mac, ou une branche « dev » Neon).
 
 ```bash
 npm install
-cp .env.example .env      # puis modifier AUTH_SECRET et le compte admin
-npm run setup             # crée la base et le super admin
+cp .env.example .env      # puis renseigner DATABASE_URL / DIRECT_URL et AUTH_SECRET
+npm run setup             # crée les tables et le super admin
 npm run dev
 ```
 
-Ouvrir http://localhost:3000/login — identifiants par défaut : `admin@portfolio.local` / `Admin123!` (**à changer** dans `.env` avant `npm run setup`, ou via « Sécurité » une fois connecté).
+Ouvrir http://localhost:3000/login avec `ADMIN_EMAIL` / `ADMIN_PASSWORD` définis dans `.env` (à changer ensuite via « Sécurité »).
 
 ## Fonctionnement
 
@@ -38,17 +42,18 @@ Un sélecteur **FR | EN** est présent dans l'en-tête public, l'espace utilisat
 
 Dans « Mon CV », l'utilisateur renseigne ses expériences, sa formation et ses langues. Une fois le CV terminé (nom, titre, présentation, compétences et au moins une expérience ou formation), il peut le télécharger en PDF, en français ou en anglais (`/api/cv/<slug>?lang=fr|en`). Le bouton « Télécharger le CV » apparaît aussi sur le portfolio public (option désactivable).
 
-## Fichiers uploadés
+## Fichiers envoyés
 
-Stockés dans `uploads/` et servis par `/api/files/<nom>` (avec support du streaming vidéo). Limites : images 8 Mo, vidéos 100 Mo (MP4, WebM, MOV).
+Le navigateur envoie les fichiers **directement** vers le stockage grâce à une URL signée (type et taille imposés), sans passer par les fonctions serveur (limitées à 4,5 Mo sur Vercel) :
+
+- **Production** : Cloudflare R2 (variables `R2_*`), fichiers servis par l'URL publique du bucket.
+- **Local** : dossier `uploads/`, servi par `/api/files/<nom>` (streaming vidéo).
+
+Limites : images 8 Mo (redimensionnées à 2000 px et recompressées), vidéos 100 Mo (MP4, WebM, MOV).
 
 ## Production
 
-Guide pas à pas (VPS, domaine, HTTPS, emails, sauvegardes, mises à jour) : **[DEPLOIEMENT.md](DEPLOIEMENT.md)**.
-
-```bash
-npm run build && npm start
-```
+Guide pas à pas Vercel + Neon + Cloudflare R2 + Brevo : **[DEPLOIEMENT.md](DEPLOIEMENT.md)**.
 
 ## Fonctionnalités pro
 
@@ -82,7 +87,7 @@ src/app/dashboard/          Espace utilisateur
 src/app/p/[slug]/           Portfolio public + contact
 src/app/page.tsx            Annuaire public
 src/lib/cv-pdf.tsx          Modèles de CV PDF
+src/lib/uploads.ts          Stockage des fichiers (R2 ou disque local)
 src/lib/i18n.ts             Traductions FR / EN
-deploy/                     Nginx, sauvegarde, mise à jour
 tests/                      Tests unitaires
 ```

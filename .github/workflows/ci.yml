@@ -8,8 +8,19 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: folio
+          POSTGRES_PASSWORD: folio
+          POSTGRES_DB: folio
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      DATABASE_URL: file:./ci.db
+      DATABASE_URL: postgresql://folio:folio@localhost:5432/folio
+      DIRECT_URL: postgresql://folio:folio@localhost:5432/folio
       AUTH_SECRET: ci-secret-not-used-in-production-0123456789
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +29,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx prisma generate
       - run: npm run typecheck
       - run: npm test
       - run: npx prisma db push --skip-generate

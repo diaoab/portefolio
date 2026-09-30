@@ -1,5 +1,4 @@
 import "server-only";
-import { readFile } from "fs/promises";
 import path from "path";
 import QRCode from "qrcode";
 import sharp from "sharp";
@@ -8,7 +7,7 @@ import type { Profile, Project } from "@prisma/client";
 import { parseEntries, splitHeading, type CvEntry, type CvTemplate } from "./cv";
 import type { Dict, Locale } from "./i18n";
 import { contrastRatio, isHex } from "./theme";
-import { UPLOAD_DIR } from "./uploads";
+import { readUpload } from "./uploads";
 import { initials, splitList } from "./utils";
 
 // ───────────── Polices (mêmes familles que le site) ─────────────
@@ -73,9 +72,10 @@ type Palette = ReturnType<typeof palette>;
 
 /** Photo de profil convertie en PNG carré (tous formats acceptés : JPEG, PNG, WebP, AVIF, GIF). */
 async function loadAvatar(url: string | null) {
-  if (!url?.startsWith("/api/files/")) return null;
+  const original = await readUpload(url);
+  if (!original) return null;
   try {
-    const data = await sharp(await readFile(path.join(UPLOAD_DIR, path.basename(url))))
+    const data = await sharp(original)
       .rotate()
       .resize(480, 480, { fit: "cover" })
       .png()

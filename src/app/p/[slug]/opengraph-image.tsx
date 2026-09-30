@@ -7,7 +7,7 @@ import { localizeProfile } from "@/lib/localize";
 import { getPublicProfile } from "@/lib/public";
 import { getSettings } from "@/lib/settings";
 import { isHex, readableOn } from "@/lib/theme";
-import { UPLOAD_DIR } from "@/lib/uploads";
+import { readUpload } from "@/lib/uploads";
 import { initials, splitList } from "@/lib/utils";
 
 export const size = { width: 1200, height: 630 };
@@ -23,8 +23,8 @@ export default async function OpengraphImage({ params }: { params: Promise<{ slu
   const accent = isHex(p.accent) ? p.accent : "#7c5cff";
 
   let photo: string | null = null;
-  if (p.avatarUrl?.startsWith("/api/files/")) {
-    const buf = await readFile(path.join(UPLOAD_DIR, path.basename(p.avatarUrl))).catch(() => null);
+  {
+    const buf = await readUpload(p.avatarUrl);
     if (buf) photo = `data:image/png;base64,${(await sharp(buf).resize(320, 320, { fit: "cover" }).png().toBuffer()).toString("base64")}`;
   }
 

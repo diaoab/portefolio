@@ -1,277 +1,167 @@
-# Guide de déploiement complet
+# Déploiement : Vercel + Neon + Cloudflare
 
-Ce guide met le site en ligne sur un **serveur VPS Ubuntu** avec votre nom de domaine et le HTTPS.
-Compter environ 1 heure la première fois.
-
-> **Pourquoi un VPS ?** Le site stocke sa base (SQLite) et les photos/vidéos envoyées sur le disque.
-> Il lui faut donc un serveur qui garde ses fichiers : un VPS convient parfaitement.
-> Les hébergeurs « serverless » (Vercel, Netlify) effacent le disque et ne conviennent pas sans modifications.
-
----
-
-## Étape 0 — Ce qu'il vous faut
-
-| Élément | Où l'obtenir | Prix indicatif |
+| Service | Rôle | Offre gratuite |
 |---|---|---|
-| Un **VPS Ubuntu 24.04**, 2 Go de RAM, 40 Go de disque | Hostinger, OVH, Contabo, DigitalOcean, Hetzner… | 5–8 €/mois |
-| Un **nom de domaine** | OVH, Namecheap, Hostinger… (`.com`, `.sn`, `.fr`…) | 10–15 €/an |
-| Un compte **SMTP** pour les emails | [Brevo](https://www.brevo.com) (300 emails/jour gratuits) ou Resend | Gratuit |
-| *(Optionnel)* **Cloudflare Turnstile** (anti-spam) | [dash.cloudflare.com](https://dash.cloudflare.com) → Turnstile | Gratuit |
+| **Vercel** | Héberge le site (Next.js) | Hobby : suffisant pour démarrer |
+| **Neon** | Base de données PostgreSQL | 0,5 Go |
+| **Cloudflare R2** | Stockage des photos et vidéos | 10 Go, sans frais de sortie |
+| **Cloudflare** (optionnel) | DNS du domaine, anti-spam Turnstile | Gratuit |
+| **Brevo** | Envoi des emails | 300 emails / jour |
 
-Notez l'**adresse IP** du VPS et le **mot de passe root** envoyés par l'hébergeur.
+Durée : environ 45 minutes. Gardez ouvert le fichier **`vercel.env`** (à la racine du projet, sur votre Mac) :
+vous allez le compléter au fil des étapes. Il contient déjà une clé secrète et un mot de passe admin générés.
+
+> `vercel.env` est ignoré par git : il ne part jamais sur GitHub. Ne le partagez pas.
 
 ---
 
-## Étape 1 — Envoyer le code sur GitHub (sur votre Mac)
+## Étape 1 — Base de données Neon
 
-Le serveur récupérera le code depuis votre dépôt `github.com/diaoab/portefolio`.
+1. Créez un compte sur [neon.tech](https://neon.tech) → **Create project**.
+   Région : **AWS Europe (Frankfurt)** (la plus proche de l'Afrique de l'Ouest et de l'Europe).
+2. Sur le tableau de bord du projet, cliquez **Connect**.
+3. Copiez la chaîne de connexion **avec « Connection pooling » activé** → collez-la dans `vercel.env` sur la ligne `DATABASE_URL`.
+4. Désactivez « Connection pooling », copiez la nouvelle chaîne → ligne `DIRECT_URL`.
+
+Les deux se ressemblent. Seule différence : la première contient `-pooler` dans le nom d'hôte.
+
+### Créer les tables et le compte super admin (depuis votre Mac)
 
 ```bash
 cd ~/Desktop/portefolio
-git add -A
-git commit -m "Version prête pour la production"
-git push origin main
+DATABASE_URL="COLLEZ_DIRECT_URL" DIRECT_URL="COLLEZ_DIRECT_URL" ADMIN_EMAIL="votre@email.com" ADMIN_PASSWORD="COLLEZ_ADMIN_PASSWORD_DE_vercel.env" npx prisma db push
 ```
 
-Le fichier `.env` (secrets) n'est **pas** envoyé : il est ignoré par git, c'est voulu.
+```bash
+DATABASE_URL="COLLEZ_DIRECT_URL" DIRECT_URL="COLLEZ_DIRECT_URL" ADMIN_EMAIL="votre@email.com" ADMIN_PASSWORD="COLLEZ_ADMIN_PASSWORD_DE_vercel.env" npm run db:seed
+```
 
-> Si le dépôt est **privé**, il faudra une clé de déploiement à l'étape 4 (expliqué là-bas).
+Le message `Super admin créé : …` confirme la création. Ce sont vos identifiants de connexion.
 
 ---
 
-## Étape 2 — Faire pointer le domaine vers le serveur
+## Étape 2 — Stockage Cloudflare R2
 
-Chez votre registraire (zone DNS du domaine), créez :
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → **R2 Object Storage**. L'activation demande une carte bancaire, mais l'offre gratuite suffit.
+2. **Create bucket** → nom : `folio-media` → emplacement automatique.
+3. **URL publique** du bucket (onglet *Settings* du bucket) :
+   - avec un domaine géré par Cloudflare : *Custom Domains → Connect Domain* → `media.mon-domaine.com` (recommandé) ;
+   - sinon : *Public Development URL → Enable* (URL `https://pub-xxxx.r2.dev`).
 
-| Type | Nom | Valeur |
-|---|---|---|
-| `A` | `@` | IP du VPS |
-| `A` | `www` | IP du VPS |
+   Mettez cette URL dans `vercel.env` → `R2_PUBLIC_URL` (sans `/` final).
+4. **CORS** (onglet *Settings* → *CORS Policy* → *Edit*), pour autoriser l'envoi depuis le site. Collez :
 
-La propagation prend de 5 minutes à quelques heures. Vérifiez avec `ping mon-domaine.com`.
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://mon-domaine.com", "https://www.mon-domaine.com", "http://localhost:3000"],
+       "AllowedMethods": ["PUT", "GET"],
+       "AllowedHeaders": ["content-type"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
 
----
-
-## Étape 3 — Préparer le serveur
-
-Connectez-vous depuis le Terminal du Mac :
-
-```bash
-ssh root@IP_DU_VPS
-```
-
-Puis, **sur le serveur** :
-
-```bash
-# Mises à jour + outils
-apt update && apt upgrade -y
-apt install -y git nginx sqlite3 ufw curl
-
-# Node.js 22
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-apt install -y nodejs
-npm install -g pm2
-
-# Pare-feu : SSH + web uniquement
-ufw allow OpenSSH
-ufw allow 'Nginx Full'
-ufw --force enable
-
-# Mémoire d'appoint (évite les plantages pendant la compilation sur 1–2 Go de RAM)
-fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
-echo '/swapfile none swap sw 0 0' >> /etc/fstab
-
-# Utilisateur dédié (ne pas faire tourner le site en root)
-adduser --disabled-password --gecos "" folio
-```
+   Ajoutez aussi l'adresse `https://votre-projet.vercel.app` si vous testez avant d'avoir le domaine.
+5. **Clés d'accès** : page R2 → *Manage R2 API Tokens* → *Create API token*
+   - Permission : **Object Read & Write**, limité au bucket `folio-media`
+   - Recopiez dans `vercel.env` : *Access Key ID* → `R2_ACCESS_KEY_ID`, *Secret Access Key* → `R2_SECRET_ACCESS_KEY`
+6. **Account ID** (visible sur la page R2, à droite, ou dans l'URL du tableau de bord) → `R2_ACCOUNT_ID`.
 
 ---
 
-## Étape 4 — Installer le site
+## Étape 3 — Emails avec Brevo
 
-```bash
-su - folio
-git clone https://github.com/diaoab/portefolio.git
-cd portefolio
-```
-
-> **Dépôt privé ?** Toujours en tant que `folio` : `ssh-keygen -t ed25519` (Entrée partout), puis `cat ~/.ssh/id_ed25519.pub`.
-> Ajoutez cette clé dans GitHub → dépôt → *Settings → Deploy keys*, puis clonez avec `git clone git@github.com:diaoab/portefolio.git`.
-
-### Créer le fichier `.env`
-
-Le plus simple : copier le `.env` préparé sur votre Mac (il contient déjà une clé secrète et un mot de passe admin générés).
-Depuis **un autre Terminal sur le Mac** :
-
-```bash
-scp ~/Desktop/portefolio/.env root@IP_DU_VPS:/home/folio/portefolio/.env
-ssh root@IP_DU_VPS "chown folio:folio /home/folio/portefolio/.env && chmod 600 /home/folio/portefolio/.env"
-```
-
-Puis sur le serveur, complétez-le :
-
-```bash
-nano .env
-```
-
-À remplir obligatoirement :
-
-- `APP_URL="https://mon-domaine.com"` — votre vrai domaine, sans `/` final
-- `ADMIN_EMAIL` — votre email de super admin
-- `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` — voir l'étape 8
-
-Enregistrez avec `Ctrl+O`, `Entrée`, puis `Ctrl+X`.
-
-### Compiler et créer la base
-
-```bash
-npm ci
-npm run setup      # crée la base prisma/data.db et le compte super admin
-npm run build
-```
-
-`npm run setup` affiche l'email et le mot de passe du super admin : **notez-les**.
-
----
-
-## Étape 5 — Lancer le site en permanence (PM2)
-
-```bash
-pm2 start ecosystem.config.cjs
-pm2 save
-exit                                    # retour en root
-env PATH=$PATH:/usr/bin pm2 startup systemd -u folio --hp /home/folio
-```
-
-Vérification : `su - folio -c "pm2 status"` doit afficher `folio` en `online`.
-
----
-
-## Étape 6 — Nginx (le serveur web devant le site)
-
-En root :
-
-```bash
-cp /home/folio/portefolio/deploy/nginx.conf /etc/nginx/sites-available/folio
-nano /etc/nginx/sites-available/folio          # remplacez mon-domaine.com par votre domaine (2 fois)
-ln -s /etc/nginx/sites-available/folio /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl reload nginx
-```
-
-Le site répond maintenant sur `http://mon-domaine.com`.
-
----
-
-## Étape 7 — HTTPS gratuit (Let's Encrypt)
-
-```bash
-apt install -y certbot python3-certbot-nginx
-certbot --nginx -d mon-domaine.com -d www.mon-domaine.com --redirect -m votre@email.com --agree-tos -n
-```
-
-Le certificat se renouvelle automatiquement. Le site est en ligne sur **https://mon-domaine.com** 🎉
-
----
-
-## Étape 8 — Emails (notifications et « mot de passe oublié »)
-
-Exemple avec **Brevo** :
-
-1. Créez un compte, puis *Paramètres → Expéditeurs & domaines* : ajoutez et **authentifiez votre domaine**
-   (Brevo donne des enregistrements DNS à ajouter chez votre registraire).
-2. *SMTP & API → SMTP* : récupérez l'identifiant et générez une clé SMTP.
-3. Dans `.env` sur le serveur :
+1. Compte sur [brevo.com](https://www.brevo.com) → *Paramètres → Expéditeurs, domaines* → ajoutez votre domaine et **authentifiez-le**
+   (Brevo fournit 3–4 enregistrements DNS à ajouter chez Cloudflare ou votre registraire).
+2. *SMTP & API → SMTP* → générez une clé SMTP.
+3. Dans `vercel.env` :
 
    ```
    SMTP_HOST="smtp-relay.brevo.com"
    SMTP_PORT="587"
-   SMTP_USER="votre-identifiant@smtp-brevo.com"
-   SMTP_PASS="votre-clé-smtp"
+   SMTP_USER="identifiant affiché par Brevo (xxxx@smtp-brevo.com)"
+   SMTP_PASS="la clé SMTP"
    MAIL_FROM="Folio <no-reply@mon-domaine.com>"
    ```
 
-4. Redémarrez : `su - folio -c "pm2 restart folio"`
+---
 
-Test : page de connexion → « Mot de passe oublié ? » avec votre email admin → l'email doit arriver.
-En cas de problème : `su - folio -c "pm2 logs folio"`.
+## Étape 4 — Anti-spam Turnstile (recommandé)
+
+Cloudflare → **Turnstile** → *Add widget* → domaines : `mon-domaine.com` et `votre-projet.vercel.app`, mode *Managed*.
+Copiez *Site Key* → `NEXT_PUBLIC_TURNSTILE_SITE_KEY` et *Secret Key* → `TURNSTILE_SECRET_KEY`.
 
 ---
 
-## Étape 9 — Anti-spam Turnstile (recommandé)
+## Étape 5 — Déployer sur Vercel
 
-1. Cloudflare → *Turnstile* → *Add widget* : domaine `mon-domaine.com`, mode *Managed*.
-2. Copiez les deux clés dans `.env` : `NEXT_PUBLIC_TURNSTILE_SITE_KEY` et `TURNSTILE_SECRET_KEY`.
-3. **Recompilez** (la clé publique est intégrée au site lors de la compilation) :
+1. [vercel.com](https://vercel.com) → connexion avec GitHub → **Add New… → Project** → importez `diaoab/portefolio`.
+2. Framework : **Next.js** (détecté automatiquement). Ne touchez pas aux commandes de build :
+   le script `vercel-build` du projet met aussi à jour les tables de la base à chaque déploiement.
+3. Dépliez **Environment Variables** et collez **tout le contenu** de `vercel.env`.
+   Vercel reconnaît le format et crée chaque variable.
+   - `APP_URL` : mettez `https://votre-projet.vercel.app` pour l'instant si vous n'avez pas encore le domaine.
+4. **Deploy**. Comptez 2 à 3 minutes. Le site est en ligne sur `https://votre-projet.vercel.app`.
 
-   ```bash
-   su - folio
-   cd portefolio && npm run build && pm2 restart folio
-   ```
+> Réglage conseillé : *Settings → Functions → Function Region* → **Frankfurt (fra1)**, la même région que Neon (le site sera plus rapide).
 
 ---
 
-## Étape 10 — Sauvegardes automatiques
+## Étape 6 — Votre nom de domaine
 
-En tant que `folio` :
+1. Vercel → projet → *Settings → Domains* → ajoutez `mon-domaine.com` (et `www.mon-domaine.com`).
+2. Vercel affiche les enregistrements DNS à créer :
+   - **Domaine chez Cloudflare** : *DNS → Records* → ajoutez-les en **désactivant le proxy** (nuage gris, « DNS only »), sinon le certificat HTTPS de Vercel ne peut pas être créé.
+   - Autre registraire : ajoutez-les dans sa zone DNS.
+3. Quand le domaine est validé (coche verte), mettez à jour la variable `APP_URL` dans Vercel → `https://mon-domaine.com`,
+   puis *Deployments* → ⋯ → **Redeploy**.
+4. Vérifiez que `https://mon-domaine.com` figure dans le CORS de R2 (étape 2.4).
+
+---
+
+## Étape 7 — Vérifications
+
+1. `https://mon-domaine.com/login` → connexion avec le super admin → **Sécurité** : changez le mot de passe.
+2. **Paramètres du site** : nom, logo (teste l'envoi vers R2), textes FR/EN, mentions légales (complétez « Hébergement : Vercel Inc., 440 N Barranca Ave #4133, Covina, CA 91723, États-Unis »).
+3. **Mon profil** → ajoutez une photo. Si l'envoi échoue, le problème vient presque toujours du CORS R2 (étape 2.4).
+4. « Mot de passe oublié ? » avec votre email → l'email doit arriver (sinon : Vercel → *Logs*).
+5. [Google Search Console](https://search.google.com/search-console) → ajoutez le domaine → soumettez `https://mon-domaine.com/sitemap.xml`.
+
+---
+
+## Mettre à jour le site
 
 ```bash
-crontab -e
+git add -A && git commit -m "Ma modification" && git push
 ```
 
-Ajoutez la ligne :
+Vercel redéploie automatiquement en 2 à 3 minutes. Si le schéma de base (`prisma/schema.prisma`) a changé, les tables sont mises à jour pendant le déploiement.
+Une modification destructrice (suppression de colonne…) est refusée : le déploiement échoue sans rien casser.
 
-```
-0 3 * * * /home/folio/portefolio/deploy/backup.sh >> /home/folio/backups.log 2>&1
-```
+## Sauvegardes
 
-Chaque nuit à 3 h, la base et les fichiers sont sauvegardés dans `/home/folio/backups` (14 jours conservés).
-Pensez à **copier ces sauvegardes hors du serveur** de temps en temps, depuis le Mac :
+- **Base** : Neon garde un historique qui permet de restaurer la base à un instant passé (*Branches → Restore*). Sur l'offre gratuite, cet historique couvre environ 24 h.
+- **Fichiers** : R2 ne crée pas de sauvegarde automatique. Pour une copie locale, installez `rclone` et configurez un remote R2.
+
+## Développer en local
 
 ```bash
-scp -r root@IP_DU_VPS:/home/folio/backups ~/Desktop/sauvegardes-folio
+npm install
+npm run dev
 ```
 
----
-
-## Étape 11 — Premiers réglages sur le site
-
-1. Connectez-vous sur `https://mon-domaine.com/login` avec le compte super admin.
-2. **Sécurité** → changez le mot de passe.
-3. **Paramètres du site** → nom, logo, textes FR/EN, **mentions légales** (complétez l'hébergeur : nom, adresse).
-4. **Utilisateurs** → créez les comptes des talents.
-5. Déclarez le site sur [Google Search Console](https://search.google.com/search-console) et soumettez `https://mon-domaine.com/sitemap.xml`.
-
----
-
-## Mettre à jour le site plus tard
-
-Sur le Mac, après vos modifications :
-
-```bash
-git add -A && git commit -m "Mise à jour" && git push
-```
-
-Sur le serveur :
-
-```bash
-ssh root@IP_DU_VPS
-su - folio
-cd portefolio && ./deploy/update.sh
-```
-
-La base de données et les fichiers envoyés sont conservés.
-
----
+Le fichier `.env` local utilise Postgres.app (démarrez l'app, puis `createdb folio` et `npm run setup`), ou une branche « dev » de Neon.
+Sans variables `R2_*`, les fichiers sont stockés dans le dossier `uploads/`.
 
 ## Dépannage
 
-| Symptôme | Commande / solution |
+| Symptôme | Cause probable |
 |---|---|
-| Voir les erreurs du site | `su - folio -c "pm2 logs folio --lines 100"` |
-| Site hors ligne (502 Bad Gateway) | `su - folio -c "pm2 restart folio"` |
-| « 413 Request Entity Too Large » à l'envoi d'une vidéo | vérifier `client_max_body_size 110M;` dans la config Nginx, puis `systemctl reload nginx` |
-| La compilation s'arrête (« Killed ») | mémoire insuffisante : vérifier le swap de l'étape 3 (`free -h`) |
-| Les emails n'arrivent pas | identifiants SMTP dans `.env`, domaine authentifié chez le fournisseur, dossier spam, `pm2 logs` |
-| Liens des emails en `localhost` | `APP_URL` mal renseigné dans `.env` → corriger puis `pm2 restart folio` |
-| Restaurer une sauvegarde | `pm2 stop folio`, copier `data-AAAA-MM-JJ.db` vers `prisma/data.db`, décompresser `uploads-….tar.gz`, `pm2 start folio` |
+| Échec du build : `Environment variable not found: DIRECT_URL` | variable manquante dans Vercel |
+| Échec du build pendant `prisma db push` | `DIRECT_URL` incorrecte, ou changement destructeur du schéma |
+| Envoi de photo en erreur (« network » ou « HTTP 403 ») | CORS R2 (origine manquante) ou clés R2 incorrectes |
+| Photos envoyées mais pas affichées | `R2_PUBLIC_URL` incorrecte ou accès public du bucket désactivé |
+| Emails non reçus | identifiants SMTP, domaine non authentifié chez Brevo, dossier spam |
+| Liens des emails vers le mauvais site | `APP_URL`, puis *Redeploy* |
+| Captcha invisible / absent | les clés Turnstile nécessitent un **Redeploy** (la clé publique est intégrée au build) |

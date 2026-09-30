@@ -1,65 +1,57 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Film, ImagePlus, Link2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, Film, ImagePlus, Link2, Loader2, X } from "lucide-react";
+import { uploadFile } from "@/lib/upload-client";
 import { useT } from "./i18n-provider";
 
 const ACCEPT = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif", "video/mp4", "video/webm", "video/quicktime"];
 const MAX = { image: 8 * 1024 * 1024, video: 100 * 1024 * 1024 };
-const MAX_TOTAL = 100 * 1024 * 1024; // limite d'un envoi (voir next.config.ts)
 
 const mb = (n: number, unit: string) => `${(n / 1024 / 1024).toFixed(n < 1024 * 1024 ? 2 : 1)} ${unit}`;
 
+type Item = { id: string; file: File; preview: string; progress: number; url?: string; error?: string };
+
 /**
- * Champ de formulaire pour ajouter plusieurs images / vidéos (glisser-déposer ou sélection)
- * et plusieurs liens YouTube / Vimeo. Les fichiers sont envoyés via le champ `files`,
- * les liens via le champ `embeds` (un par ligne).
+ * Ajout de plusieurs images / vidéos (glisser-déposer ou sélection) et de liens YouTube / Vimeo.
+ * Chaque fichier est envoyé dès son ajout, directement vers le stockage ; le formulaire transmet
+ * ensuite la liste des URLs (champ `uploaded`, JSON) et les liens (champ `embeds`, un par ligne).
  */
 export function MediaUploader() {
   const t = useT().media;
-  const [files, setFiles] = useState<File[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [rejected, setRejected] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  useEffect(() => () => itemsRef.current.forEach((i) => URL.revokeObjectURL(i.preview)), []);
 
-  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
-  useEffect(() => () => previews.forEach(URL.revokeObjectURL), [previews]);
-
-  // Le champ caché <input type="file"> reflète toujours la liste affichée,
-  // y compris après la réinitialisation automatique du formulaire par React.
-  useEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    const sync = () => {
-      const dt = new DataTransfer();
-      files.forEach((f) => dt.items.add(f));
-      input.files = dt.files;
-    };
-    sync();
-    const onReset = () => setTimeout(sync, 0);
-    input.form?.addEventListener("reset", onReset);
-    return () => input.form?.removeEventListener("reset", onReset);
-  }, [files]);
-
-  const total = files.reduce((sum, f) => sum + f.size, 0);
+  const patch = (id: string, p: Partial<Item>) => setItems((list) => list.map((i) => (i.id === id ? { ...i, ...p } : i)));
 
   function add(list: FileList | null) {
     if (!list) return;
-    const ok: File[] = [];
     const errors: string[] = [];
-    for (const f of Array.from(list)) {
-      const kind = f.type.startsWith("video/") ? "video" : "image";
-      if (!ACCEPT.includes(f.type)) errors.push(t.unsupported(f.name));
-      else if (f.size > MAX[kind]) errors.push(t.tooBig(f.name, mb(MAX[kind], t.mb)));
-      else ok.push(f);
+    const fresh: Item[] = [];
+    const known = new Set(itemsRef.current.map((i) => `${i.file.name}-${i.file.size}-${i.file.lastModified}`));
+    for (const file of Array.from(list)) {
+      const kind = file.type.startsWith("video/") ? "video" : "image";
+      if (!ACCEPT.includes(file.type)) errors.push(t.unsupported(file.name));
+      else if (file.size > MAX[kind]) errors.push(t.tooBig(file.name, mb(MAX[kind], t.mb)));
+      else if (!known.has(`${file.name}-${file.size}-${file.lastModified}`)) {
+        fresh.push({ id: crypto.randomUUID(), file, preview: URL.createObjectURL(file), progress: 0 });
+      }
     }
     setRejected(errors);
-    setFiles((prev) => {
-      const key = (f: File) => `${f.name}-${f.size}-${f.lastModified}`;
-      const known = new Set(prev.map(key));
-      return [...prev, ...ok.filter((f) => !known.has(key(f)))];
-    });
+    setItems((prev) => [...prev, ...fresh]);
+    for (const item of fresh) {
+      uploadFile(item.file, ["image", "video"], (p) => patch(item.id, { progress: p }))
+        .then((url) => patch(item.id, { url }))
+        .catch((e: unknown) => patch(item.id, { error: e instanceof Error ? e.message : "Erreur" }));
+    }
   }
+
+  const done = items.filter((i) => i.url).map((i) => i.url!);
+  const total = items.reduce((sum, i) => sum + i.file.size, 0);
 
   return (
     <div className="space-y-3">
@@ -95,8 +87,8 @@ export function MediaUploader() {
           }}
         />
       </label>
-      {/* Champ réellement envoyé avec le formulaire */}
-      <input ref={inputRef} type="file" name="files" multiple className="hidden" tabIndex={-1} aria-hidden />
+      {/* Champ réellement envoyé avec le formulaire : URLs des fichiers déjà envoyés */}
+      <input type="hidden" name="uploaded" value={JSON.stringify(done)} />
 
       {rejected.length > 0 && (
         <ul className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
@@ -104,27 +96,38 @@ export function MediaUploader() {
         </ul>
       )}
 
-      {files.length > 0 && (
+      {items.length > 0 && (
         <div>
           <div className="mb-2 flex items-center justify-between text-xs text-muted">
-            <span>{t.ready(files.length, mb(total, t.mb))}</span>
-            <button type="button" onClick={() => setFiles([])} className="hover:text-white">{t.removeAll}</button>
+            <span>{t.ready(items.length, mb(total, t.mb))}</span>
+            <button type="button" onClick={() => setItems([])} className="hover:text-white">{t.removeAll}</button>
           </div>
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {files.map((f, i) => (
-              <li key={previews[i]} className="group relative aspect-square overflow-hidden rounded-lg border border-line bg-black/40">
-                {f.type.startsWith("video/") ? (
+            {items.map((item) => (
+              <li key={item.id} className="group relative aspect-square overflow-hidden rounded-lg border border-line bg-black/40">
+                {item.file.type.startsWith("video/") ? (
                   <>
-                    <video src={previews[i]} muted className="size-full object-cover" />
+                    <video src={item.preview} muted className="size-full object-cover" />
                     <Film className="absolute bottom-1.5 left-1.5 size-4 text-white drop-shadow" />
                   </>
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={previews[i]} alt={f.name} className="size-full object-cover" />
+                  <img src={item.preview} alt={item.file.name} className="size-full object-cover" />
+                )}
+                {!item.url && !item.error && (
+                  <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-black/70 px-2 py-1 text-[11px] text-white">
+                    <Loader2 className="size-3 animate-spin" /> {Math.round(item.progress * 100)}%
+                    <span className="absolute bottom-0 left-0 h-0.5 bg-brand" style={{ width: `${item.progress * 100}%` }} />
+                  </span>
+                )}
+                {item.error && (
+                  <span className="absolute inset-0 grid place-items-center bg-red-950/80 p-2 text-center text-[11px] text-red-200" title={item.error}>
+                    <AlertCircle className="size-5" />
+                  </span>
                 )}
                 <button
                   type="button"
-                  onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                  onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
                   className="absolute top-1 right-1 rounded-full bg-black/70 p-1 text-white opacity-80 hover:opacity-100"
                   title={t.removeOne}
                 >
@@ -133,11 +136,6 @@ export function MediaUploader() {
               </li>
             ))}
           </ul>
-          {total > MAX_TOTAL && (
-            <p className="mt-2 text-xs text-red-300">
-              {t.tooMuch(mb(MAX_TOTAL, t.mb))}
-            </p>
-          )}
         </div>
       )}
 

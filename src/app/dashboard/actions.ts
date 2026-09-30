@@ -11,7 +11,8 @@ import { getT } from "@/lib/i18n-server";
 import { uniqueSlug } from "@/lib/slug";
 import { deleteUserWithFiles } from "@/lib/users";
 import { DEFAULT_THEME, isHex, THEME_PRESETS, type ThemeColors } from "@/lib/theme";
-import { checkUpload, deleteUpload, isFile, saveUpload } from "@/lib/uploads";
+import { acceptUpload, handleImageField } from "@/lib/upload-fields";
+import { deleteUpload } from "@/lib/uploads";
 import { normalizeUrl, slugify, splitList, str, toEmbedUrl, type FormState } from "@/lib/utils";
 
 async function fail(e: unknown): Promise<FormState> {
@@ -25,20 +26,9 @@ async function ownProject(id: string) {
   return project;
 }
 
-/** Gère un champ image : nouveau fichier, suppression demandée, ou valeur conservée. */
+/** Gère un champ image : nouveau fichier envoyé, suppression demandée, ou valeur conservée. */
 async function handleImage(formData: FormData, field: string, current: string | null, keep: string[] = []) {
-  const drop = (url: string | null) => (url && keep.includes(url) ? undefined : deleteUpload(url));
-  const file = formData.get(field);
-  if (isFile(file)) {
-    const { url } = await saveUpload(file, ["image"], await getT());
-    await drop(current);
-    return url;
-  }
-  if (formData.get(`remove_${field}`) === "on") {
-    await drop(current);
-    return null;
-  }
-  return current;
+  return handleImageField(formData, field, current, await getT(), keep);
 }
 
 // ───────────── Profil ─────────────
@@ -156,9 +146,8 @@ export async function createProject(_: FormState, formData: FormData): Promise<F
   if (!data.title) return { error: t.projects.titleRequired };
   let id: string;
   try {
-    const media = readMediaInput(formData, t);
-    const cover = formData.get("cover");
-    let coverUrl = isFile(cover) ? (await saveUpload(cover, ["image"], t)).url : null;
+    const media = await readMediaInput(formData, t);
+    let coverUrl = await handleImageField(formData, "cover", null, t);
     const last = await db.project.findFirst({ where: { userId: user.id }, orderBy: { position: "desc" } });
     ({ id } = await db.project.create({
       data: { ...data, coverUrl, userId: user.id, position: (last?.position ?? 0) + 1 },
@@ -228,12 +217,17 @@ export async function moveProject(formData: FormData) {
 // ───────────── Médias (images, vidéos, liens YouTube/Vimeo) ─────────────
 
 /**
- * Lit les champs `files` (plusieurs images/vidéos) et `embeds` (liens YouTube/Vimeo, un par ligne).
+ * Lit les champs `uploaded` (URLs des images/vidéos déjà envoyées, en JSON) et `embeds` (liens YouTube/Vimeo, un par ligne).
  * Tout est validé avant d'écrire quoi que ce soit, pour ne jamais enregistrer un envoi à moitié.
  */
-function readMediaInput(formData: FormData, t: Dict) {
-  const files = formData.getAll("files").filter(isFile);
-  files.forEach((f) => checkUpload(f, ["image", "video"], t));
+async function readMediaInput(formData: FormData, t: Dict) {
+  let urls: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(str(formData, "uploaded", 20000) || "[]");
+    urls = Array.isArray(parsed) ? parsed.filter((u): u is string => typeof u === "string").slice(0, 50) : [];
+  } catch {}
+  const files = [];
+  for (const url of urls) files.push(await acceptUpload(url, ["image", "video"], t));
   const embeds = str(formData, "embeds", 5000)
     .split(/\s*\n\s*/)
     .filter(Boolean)
@@ -245,12 +239,11 @@ function readMediaInput(formData: FormData, t: Dict) {
   return { files, embeds, count: files.length + embeds.length };
 }
 
-async function saveMedia(projectId: string, input: ReturnType<typeof readMediaInput>) {
+async function saveMedia(projectId: string, input: Awaited<ReturnType<typeof readMediaInput>>) {
   const last = await db.media.findFirst({ where: { projectId }, orderBy: { position: "desc" } });
   let position = last?.position ?? 0;
   const rows = [];
-  for (const file of input.files) {
-    const { url, kind } = await saveUpload(file, ["image", "video"]);
+  for (const { url, kind } of input.files) {
     rows.push({ projectId, type: kind === "video" ? "VIDEO" : "IMAGE", url, position: ++position });
   }
   for (const url of input.embeds) rows.push({ projectId, type: "EMBED", url, position: ++position });
@@ -261,7 +254,7 @@ export async function addMedia(_: FormState, formData: FormData): Promise<FormSt
   try {
     const project = await ownProject(str(formData, "projectId"));
     const t = await getT();
-    const input = readMediaInput(formData, t);
+    const input = await readMediaInput(formData, t);
     if (!input.count) return { error: t.media.needOne };
     await saveMedia(project.id, input);
     revalidatePath("/", "layout");

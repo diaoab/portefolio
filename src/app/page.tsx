@@ -19,11 +19,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       ...visibleProfile,
       ...(q && {
         OR: [
-          { fullName: { contains: q } },
-          { headline: { contains: q } },
-          { headlineEn: { contains: q } },
-          { skills: { contains: q } },
-          { location: { contains: q } },
+          { fullName: { contains: q, mode: "insensitive" } },
+          { headline: { contains: q, mode: "insensitive" } },
+          { headlineEn: { contains: q, mode: "insensitive" } },
+          { skills: { contains: q, mode: "insensitive" } },
+          { location: { contains: q, mode: "insensitive" } },
         ],
       }),
     },

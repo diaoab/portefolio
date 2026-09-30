@@ -3,10 +3,19 @@ import { cache } from "react";
 import { db } from "./db";
 import { getLocale } from "./i18n-server";
 
-/** Paramètres du site (créés avec les valeurs par défaut au premier appel). */
-export const getSettings = cache(async () =>
-  db.siteSettings.upsert({ where: { id: "site" }, update: {}, create: { id: "site" } }),
-);
+/**
+ * Paramètres du site (créés avec les valeurs par défaut au premier appel).
+ * Plusieurs requêtes simultanées peuvent tenter la création : on relit simplement la ligne en cas de conflit.
+ */
+export const getSettings = cache(async () => {
+  const existing = await db.siteSettings.findUnique({ where: { id: "site" } });
+  if (existing) return existing;
+  try {
+    return await db.siteSettings.create({ data: { id: "site" } });
+  } catch {
+    return db.siteSettings.findUniqueOrThrow({ where: { id: "site" } });
+  }
+});
 
 /** Textes du site dans la langue courante (repli sur le français si la version anglaise est vide). */
 export const getLocalizedSettings = cache(async () => {

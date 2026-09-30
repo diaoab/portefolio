@@ -8,7 +8,7 @@ import { getT } from "@/lib/i18n-server";
 import { getSettings } from "@/lib/settings";
 import { uniqueSlug } from "@/lib/slug";
 import { deleteUserWithFiles } from "@/lib/users";
-import { deleteUpload, isFile, saveUpload } from "@/lib/uploads";
+import { handleImageField } from "@/lib/upload-fields";
 import { generatePassword, str, type FormState } from "@/lib/utils";
 
 export async function updateSettings(_: FormState, formData: FormData): Promise<FormState> {
@@ -21,15 +21,7 @@ export async function updateSettings(_: FormState, formData: FormData): Promise<
 
   try {
     const current = await getSettings();
-    let logoUrl = current.logoUrl;
-    const logo = formData.get("logo");
-    if (isFile(logo)) {
-      logoUrl = (await saveUpload(logo, ["image"], t)).url;
-      await deleteUpload(current.logoUrl);
-    } else if (formData.get("remove_logo") === "on") {
-      await deleteUpload(current.logoUrl);
-      logoUrl = null;
-    }
+    const logoUrl = await handleImageField(formData, "logo", current.logoUrl, t);
 
     await db.siteSettings.update({
       where: { id: "site" },
