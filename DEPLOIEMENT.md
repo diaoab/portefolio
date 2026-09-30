@@ -8,10 +8,10 @@
 | **Cloudflare** (optionnel) | DNS du domaine, anti-spam Turnstile | Gratuit |
 | **Brevo** | Envoi des emails | 300 emails / jour |
 
-Durée : environ 45 minutes. Gardez ouvert le fichier **`vercel.env`** (à la racine du projet, sur votre Mac) :
+Durée : environ 45 minutes. Gardez ouvert le fichier **`.env`** (à la racine du projet, sur votre Mac, `open -e .env`) :
 vous allez le compléter au fil des étapes. Il contient déjà une clé secrète et un mot de passe admin générés.
 
-> `vercel.env` est ignoré par git : il ne part jamais sur GitHub. Ne le partagez pas.
+> `.env` est ignoré par git : il ne part jamais sur GitHub. Ne le partagez pas.
 
 ---
 
@@ -20,20 +20,18 @@ vous allez le compléter au fil des étapes. Il contient déjà une clé secrèt
 1. Créez un compte sur [neon.tech](https://neon.tech) → **Create project**.
    Région : **AWS Europe (Frankfurt)** (la plus proche de l'Afrique de l'Ouest et de l'Europe).
 2. Sur le tableau de bord du projet, cliquez **Connect**.
-3. Copiez la chaîne de connexion **avec « Connection pooling » activé** → collez-la dans `vercel.env` sur la ligne `DATABASE_URL`.
+3. Copiez la chaîne de connexion **avec « Connection pooling » activé** → collez-la dans `.env` sur la ligne `DATABASE_URL`.
 4. Désactivez « Connection pooling », copiez la nouvelle chaîne → ligne `DIRECT_URL`.
 
 Les deux se ressemblent. Seule différence : la première contient `-pooler` dans le nom d'hôte.
 
 ### Créer les tables et le compte super admin (depuis votre Mac)
 
-```bash
-cd ~/Desktop/portefolio
-DATABASE_URL="COLLEZ_DIRECT_URL" DIRECT_URL="COLLEZ_DIRECT_URL" ADMIN_EMAIL="votre@email.com" ADMIN_PASSWORD="COLLEZ_ADMIN_PASSWORD_DE_vercel.env" npx prisma db push
-```
+Après avoir rempli `DATABASE_URL`, `DIRECT_URL` et `ADMIN_EMAIL` dans `.env` :
 
 ```bash
-DATABASE_URL="COLLEZ_DIRECT_URL" DIRECT_URL="COLLEZ_DIRECT_URL" ADMIN_EMAIL="votre@email.com" ADMIN_PASSWORD="COLLEZ_ADMIN_PASSWORD_DE_vercel.env" npm run db:seed
+cd ~/Desktop/portefolio
+npm run setup
 ```
 
 Le message `Super admin créé : …` confirme la création. Ce sont vos identifiants de connexion.
@@ -48,7 +46,7 @@ Le message `Super admin créé : …` confirme la création. Ce sont vos identif
    - avec un domaine géré par Cloudflare : *Custom Domains → Connect Domain* → `media.mon-domaine.com` (recommandé) ;
    - sinon : *Public Development URL → Enable* (URL `https://pub-xxxx.r2.dev`).
 
-   Mettez cette URL dans `vercel.env` → `R2_PUBLIC_URL` (sans `/` final).
+   Mettez cette URL dans `.env` → `R2_PUBLIC_URL` (sans `/` final).
 4. **CORS** (onglet *Settings* → *CORS Policy* → *Edit*), pour autoriser l'envoi depuis le site. Collez :
 
    ```json
@@ -65,7 +63,7 @@ Le message `Super admin créé : …` confirme la création. Ce sont vos identif
    Ajoutez aussi l'adresse `https://votre-projet.vercel.app` si vous testez avant d'avoir le domaine.
 5. **Clés d'accès** : page R2 → *Manage R2 API Tokens* → *Create API token*
    - Permission : **Object Read & Write**, limité au bucket `folio-media`
-   - Recopiez dans `vercel.env` : *Access Key ID* → `R2_ACCESS_KEY_ID`, *Secret Access Key* → `R2_SECRET_ACCESS_KEY`
+   - Recopiez dans `.env` : *Access Key ID* → `R2_ACCESS_KEY_ID`, *Secret Access Key* → `R2_SECRET_ACCESS_KEY`
 6. **Account ID** (visible sur la page R2, à droite, ou dans l'URL du tableau de bord) → `R2_ACCOUNT_ID`.
 
 ---
@@ -75,7 +73,7 @@ Le message `Super admin créé : …` confirme la création. Ce sont vos identif
 1. Compte sur [brevo.com](https://www.brevo.com) → *Paramètres → Expéditeurs, domaines* → ajoutez votre domaine et **authentifiez-le**
    (Brevo fournit 3–4 enregistrements DNS à ajouter chez Cloudflare ou votre registraire).
 2. *SMTP & API → SMTP* → générez une clé SMTP.
-3. Dans `vercel.env` :
+3. Dans `.env` :
 
    ```
    SMTP_HOST="smtp-relay.brevo.com"
@@ -99,7 +97,7 @@ Copiez *Site Key* → `NEXT_PUBLIC_TURNSTILE_SITE_KEY` et *Secret Key* → `TURN
 1. [vercel.com](https://vercel.com) → connexion avec GitHub → **Add New… → Project** → importez `diaoab/portefolio`.
 2. Framework : **Next.js** (détecté automatiquement). Ne touchez pas aux commandes de build :
    le script `vercel-build` du projet met aussi à jour les tables de la base à chaque déploiement.
-3. Dépliez **Environment Variables** et collez **tout le contenu** de `vercel.env`.
+3. Dépliez **Environment Variables** et collez **tout le contenu** de `.env`.
    Vercel reconnaît le format et crée chaque variable.
    - `APP_URL` : mettez `https://votre-projet.vercel.app` pour l'instant si vous n'avez pas encore le domaine.
 4. **Deploy**. Comptez 2 à 3 minutes. Le site est en ligne sur `https://votre-projet.vercel.app`.
@@ -151,8 +149,8 @@ npm install
 npm run dev
 ```
 
-Le fichier `.env` local utilise Postgres.app (démarrez l'app, puis `createdb folio` et `npm run setup`), ou une branche « dev » de Neon.
-Sans variables `R2_*`, les fichiers sont stockés dans le dossier `uploads/`.
+Le site local utilise le même `.env` (base Neon, stockage R2). Pour séparer les données de test,
+créez une branche « dev » dans Neon et mettez ses URLs dans `.env`. Sans variables `R2_*`, les fichiers vont dans `uploads/`.
 
 ## Dépannage
 

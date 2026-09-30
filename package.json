@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "vercel-build": "prisma generate && prisma db push --skip-generate && next build",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "configure": "node scripts/configure.mjs"
   },
   "prisma": {
     "seed": "node prisma/seed.mjs"
